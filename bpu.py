@@ -4,50 +4,46 @@
 
 import os
 import sys
-import xml.etree.ElementTree as et
+import json
 import requests
 from time import gmtime, strftime
 from key import ACCESS_TOKEN, USERNAME
 
 class PhotosAPI:
     MP = "http://api-fotki.yandex.ru/api/users/%s/" % USERNAME
-    SPEC = "{http://www.w3.org/2005/Atom}"
     def __init__(self, key):
         self.key = "OAuth " + key
 
     def getAlbums(self):
         url = self.MP + "albums/"
-        rq = requests.get(url)
+        rq = requests.get(url, headers={'Accept' : 'application/json'})
+        js =  json.loads(rq.text)
         res = {}
-        xml = et.fromstring(rq.text.encode('utf-8'))
-        for line in xml.findall(self.SPEC + 'entry'):
-            id_string = line.find(self.SPEC + 'id').text
-            real_id = id_string.split(":")[-1]
-            res[real_id] = line.find(self.SPEC + 'title').text
+        for entry in js['entries']:
+            real_id = entry['id'].split(":")[-1]
+            res[real_id] = entry['title']
         return res
         
 
     def createAlbum(self, album_name):
         url = self.MP + "albums/"
-        data = """<entry xmlns="http://www.w3.org/2005/Atom" xmlns:f="yandex:fotki">
-        <title>%s</title>
-        </entry>""" % album_name
+        data_dict = {'title': album_name}
+        data_js = json.dumps(data_dict)
         rq = requests.post(url, headers={'Authorization' : self.key,
-            'content-type':'application/atom+xml; charset=utf-8; type=entry'}, data=data)
-        xml = et.fromstring(rq.text.encode('utf-8'))
-        id_string = xml.find(self.SPEC + 'id').text
-        real_id = id_string.split(":")[-1]
+            'Accept' : 'application/json',
+            'content-type':'application/json; charset=utf-8; type=entry'}, data=data_js)
+        js = json.loads(rq.text)
+        real_id = js['id'].split(":")[-1]
         return real_id
 
     def uploadPhoto(self, album_id, photo):
         url = "%salbum/%s/photos/" % (self.MP, album_id)
         headers = {'Authorization' : self.key,
+            'Accept' : 'application/json',
             'content-type':'image/jpeg'}
         rq = requests.post(url, headers=headers, data=photo)
-        xml = et.fromstring(rq.text.encode('utf-8'))
-        content_element = xml.find(self.SPEC + 'content')
-        link = content_element.get('src')
-        return link
+        js = json.loads(rq.text)
+        return js['img']['orig']['href']
 
 def uploadPhotos(path):
     dir_name = os.path.abspath(path).split("/")[-1]
